@@ -70,6 +70,4 @@ Future enhancements may include:
 ## Author
 **Prudencio Ceada Morales**
 
-## License
-This project is licensed under the MIT License.
 
