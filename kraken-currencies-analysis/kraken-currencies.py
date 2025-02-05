@@ -5,122 +5,122 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Crear una instancia de la API de Kraken
+# Create a Kraken API instance
 api = krakenex.API()
 k = KrakenAPI(api)
 
-# Obtener los pares de divisas disponibles
+# Retrieve available currency pairs
 pairs_data = k.get_tradable_asset_pairs()
 
-# Extraer base y quote a partir de wsname
+# Extract base and quote currencies from wsname
 pairs_data[['base', 'quote']] = pairs_data['wsname'].str.split('/', expand=True)
 
-# Limpiar espacios
+# Trim spaces
 pairs_data['base'] = pairs_data['base'].str.strip()
 pairs_data['quote'] = pairs_data['quote'].str.strip()
 
-# Crear listas únicas de divisas base y de cotización
+# Create unique lists of base and quote currencies
 base_currencies = pairs_data['base'].unique()
 quote_currencies = pairs_data['quote'].unique()
 
-# Título de la aplicación
-st.title("Análisis de Divisas con Kraken")
+# Application title
+st.title("Currency Analysis with Kraken")
 
-# Establecer valores predeterminados
+# Set default values
 default_base = "ETH" if "ETH" in base_currencies else base_currencies[0]
 default_quote = "EUR" if "EUR" in quote_currencies else quote_currencies[0]
 
-# Seleccionar la divisa base y cotización
-base = st.selectbox("Seleccionar divisa base:", base_currencies, index=list(base_currencies).index(default_base))
-quote = st.selectbox("Seleccionar divisa de cotización:", quote_currencies, index=list(quote_currencies).index(default_quote))
+# Select base and quote currency
+base = st.selectbox("Select base currency:", base_currencies, index=list(base_currencies).index(default_base))
+quote = st.selectbox("Select quote currency:", quote_currencies, index=list(quote_currencies).index(default_quote))
 
 if base and quote:
     selected_pair = f"{base}{quote}"
-    st.write(f"Par seleccionado: {base}/{quote}")
+    st.write(f"Selected pair: {base}/{quote}")
 
-    # Obtener el nombre alternativo del par (altname)
+    # Get alternative pair name (altname)
     altname = pairs_data.loc[(pairs_data['base'] == base) & (pairs_data['quote'] == quote), 'altname'].values[0]
 
-    # Seleccionar el intervalo con valores discretos
+    # Select interval with discrete values
     interval_options = {
-        1: "1 minuto",
-        5: "5 minutos",
-        15: "15 minutos",
-        30: "30 minutos",
-        60: "1 hora",
-        240: "4 horas",
-        1440: "1 día",
-        10080: "1 semana",
-        21600: "15 días"
+        1: "1 minute",
+        5: "5 minutes",
+        15: "15 minutes",
+        30: "30 minutes",
+        60: "1 hour",
+        240: "4 hours",
+        1440: "1 day",
+        10080: "1 week",
+        21600: "15 days"
     }
-    interval_label = st.selectbox("Selecciona el intervalo:", list(interval_options.values()))
+    interval_label = st.selectbox("Select interval:", list(interval_options.values()))
     interval = [key for key, value in interval_options.items() if value == interval_label][0]
 
     try:
-        # Obtener datos OHLC
+        # Retrieve OHLC data
         ohlc_data, _ = k.get_ohlc_data(altname, interval=interval)
 
-        # Establecer `dtime` como índice si no lo está ya
+        # Set `dtime` as index if not already set
         if 'dtime' in ohlc_data.columns:
             ohlc_data.set_index('dtime', inplace=True)
 
-        # Eliminar la columna `time` si existe
+        # Remove `time` column if it exists
         if 'time' in ohlc_data.columns:
             ohlc_data.drop(columns=['time'], inplace=True)
 
-        # Renombrar columnas para una mejor comprensión
+        # Rename columns for better clarity
         ohlc_data.rename(columns={
-            'close': 'Precio de Cierre',
-            'Upper': 'Banda Superior',
-            'Lower': 'Banda Inferior',
-            'volume': 'Volumen'
+            'close': 'Closing Price',
+            'Upper': 'Upper Band',
+            'Lower': 'Lower Band',
+            'volume': 'Volume'
         }, inplace=True)
 
-        # Calcular Bandas de Bollinger
-        window = st.slider("Selecciona el período para las Bandas de Bollinger:", 5, 50, 10)
-        ohlc_data['SMA'] = ohlc_data['Precio de Cierre'].rolling(window=window).mean()
-        ohlc_data['Banda Superior'] = ohlc_data['SMA'] + 2 * ohlc_data['Precio de Cierre'].rolling(window=window).std()
-        ohlc_data['Banda Inferior'] = ohlc_data['SMA'] - 2 * ohlc_data['Precio de Cierre'].rolling(window=window).std()
+        # Compute Bollinger Bands
+        window = st.slider("Select period for Bollinger Bands:", 5, 50, 10)
+        ohlc_data['SMA'] = ohlc_data['Closing Price'].rolling(window=window).mean()
+        ohlc_data['Upper Band'] = ohlc_data['SMA'] + 2 * ohlc_data['Closing Price'].rolling(window=window).std()
+        ohlc_data['Lower Band'] = ohlc_data['SMA'] - 2 * ohlc_data['Closing Price'].rolling(window=window).std()
 
-        # Calcular si el volumen es alto
-        ohlc_data['Volumen Alto'] = ohlc_data['Volumen'] > (
-            ohlc_data['Volumen'].rolling(window=window).mean() + 0.5 * ohlc_data['Volumen'].rolling(window=window).std()
+        # Identify high volume periods
+        ohlc_data['High Volume'] = ohlc_data['Volume'] > (
+            ohlc_data['Volume'].rolling(window=window).mean() + 0.5 * ohlc_data['Volume'].rolling(window=window).std()
         )
 
-        # Generar señales basadas en Bandas y Volumen
-        ohlc_data['Señal de Compra'] = (
-            (ohlc_data['Precio de Cierre'] < ohlc_data['Banda Inferior']) &
-            (ohlc_data['Volumen Alto'])
+        # Generate buy and sell signals based on Bollinger Bands and Volume
+        ohlc_data['Buy Signal'] = (
+            (ohlc_data['Closing Price'] < ohlc_data['Lower Band']) &
+            (ohlc_data['High Volume'])
         )
-        ohlc_data['Señal de Venta'] = (
-            (ohlc_data['Precio de Cierre'] > ohlc_data['Banda Superior']) &
-            (ohlc_data['Volumen Alto'])
+        ohlc_data['Sell Signal'] = (
+            (ohlc_data['Closing Price'] > ohlc_data['Upper Band']) &
+            (ohlc_data['High Volume'])
         )
 
-        # Depuración: Verificar señales generadas
-        st.write("Señales generadas (últimos 50 registros):")
-        st.write(ohlc_data[['Precio de Cierre', 'Banda Inferior', 'Banda Superior', 'Volumen Alto', 'Señal de Compra', 'Señal de Venta']].tail(50))
+        # Debugging: Display generated signals
+        st.write("Generated signals (last 50 records):")
+        st.write(ohlc_data[['Closing Price', 'Lower Band', 'Upper Band', 'High Volume', 'Buy Signal', 'Sell Signal']].tail(50))
 
-        # Graficar los datos
+        # Plot the data
         fig, ax = plt.subplots(figsize=(12, 6))
-        ax.plot(ohlc_data.index, ohlc_data['Precio de Cierre'], label='Precio de Cierre', color='blue')
-        ax.plot(ohlc_data.index, ohlc_data['Banda Superior'], label='Banda Superior', color='red', linestyle='--')
-        ax.plot(ohlc_data.index, ohlc_data['Banda Inferior'], label='Banda Inferior', color='green', linestyle='--')
+        ax.plot(ohlc_data.index, ohlc_data['Closing Price'], label='Closing Price', color='blue')
+        ax.plot(ohlc_data.index, ohlc_data['Upper Band'], label='Upper Band', color='red', linestyle='--')
+        ax.plot(ohlc_data.index, ohlc_data['Lower Band'], label='Lower Band', color='green', linestyle='--')
 
-        # Añadir señales
-        ax.scatter(ohlc_data.index[ohlc_data['Señal de Compra']],
-                   ohlc_data['Precio de Cierre'][ohlc_data['Señal de Compra']], label='Señal de Compra', color='green', marker='^', alpha=1)
-        ax.scatter(ohlc_data.index[ohlc_data['Señal de Venta']],
-                   ohlc_data['Precio de Cierre'][ohlc_data['Señal de Venta']], label='Señal de Venta', color='red', marker='v', alpha=1)
+        # Add signals
+        ax.scatter(ohlc_data.index[ohlc_data['Buy Signal']],
+                   ohlc_data['Closing Price'][ohlc_data['Buy Signal']], label='Buy Signal', color='green', marker='^', alpha=1)
+        ax.scatter(ohlc_data.index[ohlc_data['Sell Signal']],
+                   ohlc_data['Closing Price'][ohlc_data['Sell Signal']], label='Sell Signal', color='red', marker='v', alpha=1)
 
-        ax.set_title(f"Análisis de {base}/{quote} con Bandas de Bollinger y Volumen Optimizado")
-        ax.set_xlabel("Fecha")
-        ax.set_ylabel("Precio")
+        ax.set_title(f"Analysis of {base}/{quote} with Bollinger Bands and Volume Optimization")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Price")
         ax.legend()
         ax.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray')
 
-        # Mostrar el gráfico en Streamlit
+        # Display the chart in Streamlit
         st.pyplot(fig)
 
     except Exception as e:
-        st.write(f"Error al obtener los datos OHLC: {e}")
+        st.write(f"Error retrieving OHLC data: {e}")
